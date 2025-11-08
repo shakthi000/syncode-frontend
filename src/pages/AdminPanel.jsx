@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { FaTrash, FaEdit, FaUser, FaCode, FaChartBar, FaSignOutAlt } from "react-icons/fa";
+import { FaEdit, FaUser, FaCode, FaChartBar, FaSignOutAlt } from "react-icons/fa";
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,

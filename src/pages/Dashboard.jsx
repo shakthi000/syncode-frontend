@@ -21,7 +21,6 @@ const Dashboard = () => {
   const [output, setOutput] = useState("");
   const [snippets, setSnippets] = useState([]);
   const [pinned, setPinned] = useState([]);
-  const [runHistory, setRunHistory] = useState([]);
   const [isRunning, setIsRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
