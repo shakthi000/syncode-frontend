@@ -4,7 +4,8 @@ import axios from "axios";
 import io from "socket.io-client";
 import "./editor.css";
 
-const socket = io("http://localhost:5000");
+const API_URL = process.env.REACT_APP_API_URL; // e.g., https://your-backend-url
+const socket = io(API_URL);
 
 const EditorPage = ({ code, setCode, language, setLanguage, output, setOutput, fetchSnippets, theme }) => {
   const [isRunning, setIsRunning] = useState(false);
@@ -27,7 +28,7 @@ const EditorPage = ({ code, setCode, language, setLanguage, output, setOutput, f
 
     try {
       const languageMap = { python: "python", cpp: "c++", c: "c", java: "java", javascript: "javascript" };
-      const res = await axios.post("http://localhost:5000/run", {
+      const res = await axios.post(`${API_URL}/run`, {
         language: languageMap[language],
         code,
       });
@@ -42,7 +43,7 @@ const EditorPage = ({ code, setCode, language, setLanguage, output, setOutput, f
   const saveSnippet = async () => {
     setIsSaving(true);
     try {
-      await axios.post("http://localhost:5000/save", { language, code });
+      await axios.post(`${API_URL}/save`, { language, code });
       setOutput("💾 Code saved successfully!");
       fetchSnippets();
     } catch (err) {

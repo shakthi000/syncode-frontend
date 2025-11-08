@@ -1,252 +1,143 @@
 import React, { useEffect, useState } from "react";
-import Editor from "@monaco-editor/react";
 import axios from "axios";
-import io from "socket.io-client";
-import "./dashboard.css";
-import { FaUserCircle } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
-import ChatBot from "./Chatbot"; // make sure path is correct
+import "./Profile.css";
 
-const socket = io("http://localhost:5000");
+const API_URL = process.env.REACT_APP_API_URL; // Add this env variable in Vercel
 
-const Dashboard = () => {
-  const username = localStorage.getItem("username") || "User";
+const Profile = () => {
   const userId = localStorage.getItem("userId");
-  const token = localStorage.getItem("token");
-  const navigate = useNavigate();
-
-  const [activeTab, setActiveTab] = useState("editor"); // editor or chat
-  const [code, setCode] = useState("");
-  const [language, setLanguage] = useState("python");
-  const [output, setOutput] = useState("");
+  const [profile, setProfile] = useState({ username: "", email: "", avatar: "" });
+  const [file, setFile] = useState(null);
   const [snippets, setSnippets] = useState([]);
-  const [pinned, setPinned] = useState([]);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
+  const [runHistory, setRunHistory] = useState([]);
 
-  // Real-time collaboration
   useEffect(() => {
-    socket.on("receive-code", (data) => setCode(data));
-    return () => socket.off("receive-code");
-  }, []);
-
-  // Fetch snippets
-  useEffect(() => {
-    if (!userId) return;
-    const fetchSnippets = async () => {
+    const fetchProfile = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/snippets/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setSnippets(res.data);
-        setPinned(res.data.filter((s) => s.pinned));
+        const res = await axios.get(`${API_URL}/users/${userId}`);
+        setProfile(res.data);
       } catch (err) {
-        console.error("Error fetching snippets:", err);
+        console.error(err);
       }
     };
+
+    const fetchSnippets = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/snippets/${userId}`);
+        setSnippets(res.data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    const fetchRunHistory = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/run-history/${userId}`);
+        setRunHistory(res.data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchProfile();
     fetchSnippets();
-  }, [userId, token]);
+    fetchRunHistory();
+  }, [userId]);
 
-  // Handle code change
-  const handleCodeChange = (value) => {
-    setCode(value);
-    socket.emit("code-change", value);
-  };
+  const handleSave = async () => {
+    const formData = new FormData();
+    formData.append("username", profile.username);
+    formData.append("email", profile.email);
+    if (file) formData.append("avatar", file);
 
-  // Run code
-  const runCode = async () => {
-    if (!code.trim()) {
-      setOutput("⚠️ Code is empty!");
-      return;
-    }
-    setIsRunning(true);
-    setOutput("Running...");
     try {
-      const languageMap = {
-        python: "python",
-        cpp: "c++",
-        c: "c",
-        java: "java",
-        javascript: "javascript",
-      };
-      const res = await axios.post(
-        "http://localhost:5000/run",
-        { language: languageMap[language], code },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const result = res.data.run?.output || "No output";
-      setOutput(result);
-    } catch (err) {
-      setOutput("❌ Error: " + (err.response?.data?.error || err.message));
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
-  // Save snippet and add to ChatBot FAISS
-  const saveSnippet = async () => {
-    if (!code.trim()) return;
-    setIsSaving(true);
-    try {
-      const saveRes = await axios.post(
-        "http://localhost:5000/save",
-        { language, code },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      // Add to FAISS store for chatbot
-      await axios.post(
-        "http://localhost:5000/chatbot/addSnippet",
-        { snippetId: saveRes.data._id, code },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      // Refresh snippets
-      const res = await axios.get(`http://localhost:5000/snippets/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      await axios.put(`${API_URL}/users/${userId}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
-      setSnippets(res.data);
-      setPinned(res.data.filter((s) => s.pinned));
-      alert("✅ Snippet saved and synced to ChatBot!");
+      alert("Profile updated!");
+      if (file) {
+        const avatarUrl = URL.createObjectURL(file);
+        setProfile({ ...profile, avatar: avatarUrl });
+      }
     } catch (err) {
-      alert("Error saving snippet: " + err.message);
-    } finally {
-      setIsSaving(false);
+      alert("Error updating profile: " + err.message);
     }
-  };
-
-  // Delete snippet
-  const deleteSnippet = async (id) => {
-    if (!window.confirm("Delete this snippet?")) return;
-    try {
-      await axios.delete(`http://localhost:5000/snippets/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setSnippets(snippets.filter((s) => s._id !== id));
-      setPinned(pinned.filter((s) => s._id !== id));
-    } catch (err) {
-      alert("Error deleting snippet: " + err.message);
-    }
-  };
-
-  // Pin/unpin snippet
-  const togglePin = async (sn) => {
-    try {
-      const updated = { ...sn, pinned: !sn.pinned };
-      await axios.put(`http://localhost:5000/snippets/${sn._id}`, updated, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const updatedSnippets = snippets.map((s) => (s._id === sn._id ? updated : s));
-      setSnippets(updatedSnippets);
-      setPinned(updatedSnippets.filter((s) => s.pinned));
-    } catch (err) {
-      alert("Error updating pin: " + err.message);
-    }
-  };
-
-  // Download snippet
-  const downloadSnippet = (sn) => {
-    const element = document.createElement("a");
-    const file = new Blob([sn.code], { type: "text/plain" });
-    element.href = URL.createObjectURL(file);
-    element.download = `snippet.${sn.language === "cpp" ? "cpp" : sn.language}`;
-    document.body.appendChild(element);
-    element.click();
-  };
-
-  // Clear output
-  const clearOutput = () => setOutput("");
-
-  // Logout
-  const handleLogout = () => {
-    setLoggingOut(true);
-    setTimeout(() => {
-      localStorage.clear();
-      window.location.reload();
-    }, 500);
   };
 
   return (
-    <div className={`dashboard-container ${loggingOut ? "fade-out" : ""}`}>
-      <header className="dashboard-header">
-        <h2>🚀 Welcome, {username}</h2>
-        <button className="logout-btn" onClick={handleLogout}>🔒 Logout</button>
-        <div className="header-actions" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <FaUserCircle size={30} style={{ cursor: "pointer" }} onClick={() => navigate("/profile")} />
-        </div>
-      </header>
+    <div className="profile-page">
+      <h2>👤 My Profile</h2>
 
-      {/* Tabs */}
-      <div className="dashboard-tabs">
-        <button className={activeTab === "editor" ? "active" : ""} onClick={() => setActiveTab("editor")}>🖥️ Editor</button>
-        <button className={activeTab === "chat" ? "active" : ""} onClick={() => setActiveTab("chat")}>🤖 ChatBot</button>
+      <div className="profile-card">
+        <div className="avatar-section">
+          <img
+            src={file ? URL.createObjectURL(file) : profile.avatar || "/default-avatar.png"}
+            alt="avatar"
+            className="avatar"
+          />
+          <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+        </div>
+
+        <div className="profile-details">
+          <input
+            value={profile.username}
+            onChange={(e) => setProfile({ ...profile, username: e.target.value })}
+            placeholder="Username"
+          />
+          <input
+            value={profile.email}
+            onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+            placeholder="Email"
+          />
+          <button onClick={handleSave}>💾 Save</button>
+        </div>
       </div>
 
-      {activeTab === "editor" && (
-        <>
-          {/* Toolbar */}
-          <div className="toolbar">
-            <select value={language} onChange={(e) => setLanguage(e.target.value)}>
-              <option value="python">🐍 Python</option>
-              <option value="cpp">⚙️ C++</option>
-              <option value="c">💡 C</option>
-              <option value="java">☕ Java</option>
-              <option value="javascript">⚡ JavaScript</option>
-            </select>
-            <div>
-              <button onClick={runCode} disabled={isRunning}>{isRunning ? "Running..." : "Run ▶️"}</button>
-              <button onClick={saveSnippet} disabled={isSaving}>{isSaving ? "Saving..." : "💾 Save"}</button>
-              <button onClick={clearOutput}>🧹 Clear Output</button>
-            </div>
-          </div>
+      <div className="activity-section">
+        <h3>📜 Snippets</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Language</th>
+              <th>Created At</th>
+              <th>Pinned</th>
+            </tr>
+          </thead>
+          <tbody>
+            {snippets.map((sn) => (
+              <tr key={sn._id}>
+                <td>{sn.language}</td>
+                <td>{new Date(sn.createdAt).toLocaleString()}</td>
+                <td>{sn.pinned ? "⭐" : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-          {/* Editor */}
-          <Editor
-            height="55vh"
-            width="100%"
-            theme="vs-dark"
-            language={language}
-            value={code}
-            onChange={handleCodeChange}
-            options={{
-              fontSize: 16,
-              minimap: { enabled: false },
-              fontFamily: "JetBrains Mono, monospace",
-              scrollBeyondLastLine: false,
-            }}
-          />
-
-          {/* Output */}
-          <div className="output-container">
-            <h3>🖥 Output</h3>
-            <pre>{output}</pre>
-          </div>
-
-          {/* Snippets */}
-          <div className="snippets-section">
-            <h3>📜 Your Snippets</h3>
-            <ul>
-              {[...pinned, ...snippets.filter((s) => !s.pinned)].map((sn) => (
-                <li key={sn._id} className={sn.pinned ? "pinned-snippet" : ""}>
-                  <div className="snippet-item" onClick={() => { setCode(sn.code); setLanguage(sn.language); }}>
-                    <strong>{sn.language}</strong> {sn.pinned && "⭐"} — <span>{new Date(sn.createdAt).toLocaleString()}</span>
-                  </div>
-                  <div className="snippet-actions">
-                    <button onClick={() => downloadSnippet(sn)}>💾 Download</button>
-                    <button onClick={() => togglePin(sn)}>{sn.pinned ? "📌 Unpin" : "📌 Pin"}</button>
-                    <button onClick={() => deleteSnippet(sn._id)}>🗑️ Delete</button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      )}
-
-      {activeTab === "chat" && <ChatBot />}
+        <h3>🖥 Run History</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Language</th>
+              <th>Output</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {runHistory.map((run, index) => (
+              <tr key={index}>
+                <td>{run.language}</td>
+                <td>
+                  <pre>{run.output}</pre>
+                </td>
+                <td>{new Date(run.time).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
 
-export default Dashboard;
+export default Profile;

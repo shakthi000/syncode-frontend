@@ -14,6 +14,8 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
+const API_URL = process.env.REACT_APP_API_URL; // Add this env variable in Vercel
+
 const AdminPanel = () => {
   const [users, setUsers] = useState([]);
   const [snippets, setSnippets] = useState([]);
@@ -25,10 +27,10 @@ const AdminPanel = () => {
       try {
         const token = localStorage.getItem("token");
         const [usersRes, snippetsRes] = await Promise.all([
-          axios.get("http://localhost:5000/admin/users", {
+          axios.get(`${API_URL}/admin/users`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
-          axios.get("http://localhost:5000/snippets", {
+          axios.get(`${API_URL}/snippets`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
