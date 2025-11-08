@@ -77,10 +77,6 @@ const Dashboard = () => {
       );
       const result = res.data.run?.output || "No output";
       setOutput(result);
-      setRunHistory((prev) => [
-        { code, language, output: result, time: new Date() },
-        ...prev,
-      ]);
     } catch (err) {
       setOutput("❌ Error: " + (err.response?.data?.error || err.message));
     } finally {
